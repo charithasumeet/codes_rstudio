@@ -1,0 +1,429 @@
+---
+title: "Final Project"
+author: "Charitha Sumeet"
+date: 12/14/2023
+output: pdf_document
+---
+
+
+```{r}
+library(dplyr)
+library(tidyverse)
+library(caret)
+library(ggplot2)
+library(corrplot)
+library(caret)
+library(MASS)
+library(caret)
+library(MASS)
+library(glmnet)
+library(class)
+library(dplyr)
+library(e1071)
+library(FNN) 
+library(gmodels) 
+library(psych)
+library(naivebayes)
+library(rpart)
+library(ipred)
+library(tree)
+library(mlbench)
+library(randomForest)
+```
+
+
+```{r}
+library(rpart)
+```
+
+
+
+
+```{r}
+#Explore the data
+mental_health <- X2020_NSCH_Topical_CAHMI_DRC_v2
+mental_var <- X2020_NSCH_Variable_lables_CAHMI_DRC
+
+colSums(is.na(mental_health))
+head(mental_health)
+str(mental_health)
+nrow(mental_health)
+ncol(mental_health)
+
+
+mental <- mental_health %>%
+  dplyr::select(anxiety_20, behavior_20, DevDelay_20, IntDisab_20, 
+                speech_20, learning_20, ACE9,ACE10, ACE12,
+                sex_20,SC_AGE_YEARS,SCREENTIME,smoking_20,
+                MotherMH_20,FatherMH_20,ACE3,ACE4,ACE5,ACE6,ACE7,ACE8
+)
+
+
+ment1 <- mental
+ment1[ment1 == 99] <- NA
+ment <- na.omit(ment1)
+sum(is.na(ment))
+nrow(ment)
+
+# Estimating zero and nearZero variance
+nzv <- nearZeroVar(ment, saveMetrics= TRUE)
+print(nzv)
+```
+
+
+```{r}
+#Examine the correlation between the variables using corrplot package
+
+# Correlation using pearson method
+pearson <- cor(ment, use = "pairwise.complete.obs", method = "pearson")
+# Printing the values of pearson correlation
+print(pearson)
+# Estimating the number of pairs of variables with correlation greater than 0.95
+highCorr <- findCorrelation(abs(pearson), cutoff=0.95)
+# Printing the number of pairs
+print(highCorr)
+
+# Assuming 'ment' is your dataframe and 'highCorr' contains column indices
+highCorrNames <- colnames(ment)[highCorr]
+
+# Print the column names
+print(highCorrNames)
+
+# Plotting the pearson correlation
+corrplot(pearson, method = "square")
+
+
+# Correlation using spearman method
+spearman <- cor(ment, use = "pairwise.complete.obs", method = "spearman")
+# Printing the values of spearman correlation
+print(spearman)
+# Estimating the number of pairs of variables with correlation greater than 0.95
+highCorr2 <- findCorrelation(abs(spearman), cutoff=0.95)
+
+# Assuming 'ment' is your dataframe and 'highCorr' contains column indices
+highCorrNames <- colnames(ment)[highCorr2]
+
+# Print the column names
+print(highCorr2)
+
+# Printing the number of pairs
+print(highCorr2)#Change the variables into Binary ones
+# Plotting the spearman correlation
+corrplot(spearman, method = "square")
+```
+
+
+```{r}
+ment <- ment %>%
+  dplyr::select(-speech_20, -IntDisab_20, -behavior_20, -DevDelay_20)
+
+#Since pearson's correlation had suggested 5 extremely highly correlated variables, it may lead to reducndancy / difficulty in analysis since it may overfit the data. 
+
+#Replace 2 by 0.
+#smoking_20
+#1 "Yes"
+#2 "No"
+
+ment$smoking_20 <- ifelse(ment$smoking_20 == 2, 0, ment$smoking_20)
+table(ment$smoking_20)
+
+#ACE3
+#1 "Yes"
+#2 "No"
+
+ment$ACE3 <- ifelse(ment$ACE3 == 2, 0, ment$ACE3)
+table(ment$ACE3)
+
+#ACE4
+table(ment$ACE4)
+ment$ACE4 <- ifelse(ment$ACE4 == 2, 0, ment$ACE4)
+
+#ACE5
+table(ment$ACE5)
+ment$ACE5 <- ifelse(ment$ACE5 == 2, 0, ment$ACE5)
+
+#ACE6
+table(ment$ACE6)
+ment$ACE6 <- ifelse(ment$ACE6 == 2, 0, ment$ACE6)
+
+#ACE7
+table(ment$ACE7)
+ment$ACE7 <- ifelse(ment$ACE7 == 2, 0, ment$ACE7)
+
+
+#ACE9
+table(ment$ACE9)
+ment$ACE9 <- ifelse(ment$ACE9 == 2, 0, ment$ACE9)
+
+#ACE10
+table(ment$ACE10)
+ment$ACE10 <- ifelse(ment$ACE10 == 2, 0, ment$ACE10)
+table(ment$ACE10)
+
+sum(is.na(ment))
+
+#Non Binary 
+
+#learning_20 #1 "Does not have condition" #2 "Ever told, but does not currently have condition" #3 "Currently has condition" #99 "Missing" #95 "Children age 0-2 years"
+table(ment$learning_20)
+ment$learning_20 <- factor(ment$learning_20,
+                     levels = c("1", "2", "3", "95"),
+                     labels = c("0", "1", "2", "3"))
+ment$learning_20 <- as.numeric(as.character(ment$learning_20))
+table(ment$learning_20)
+
+
+#ACE12 1 "Yes" 2 "No" 90 "Children age 6-17 years" 
+ment$ACE12 <- factor(ment$ACE12,
+                     levels = c("1", "2", "90"),
+                     labels = c("0", "1", "2"))
+ment$ACE12 <- as.numeric(as.character(ment$ACE12))
+table(ment$ACE12)
+
+#anxiety_20 : #1 "Does not have condition", #2 "Ever told, but does not currently have condition", #3 "Currently has condition", #95 "Children age 0-2 years"
+
+ment$anxiety_20 <- factor(ment$anxiety_20,
+                     levels = c("1", "2", "3", "95"),
+                     labels = c("0", "1", "2", "3"))
+ment$anxiety_20 <- as.numeric(as.character(ment$anxiety_20))
+table(ment$anxiety_20)
+
+
+
+#SCREENTIME #1 "Less than 1 hour" #2 "1 hour" #3 "2 hours" #4 "3 hours" #5 "4 or more hours" #99 "Missing"
+table(ment$SCREENTIME)
+ment$SCREENTIME <- factor(ment$SCREENTIME,
+                     levels = c("1", "2", "3", "4","5"),
+                     labels = c("0", "1", "2", "3", "4"))
+ment$SCREENTIME <- as.numeric(as.character(ment$SCREENTIME))
+table(ment$SCREENTIME)
+
+#MotherMH_20 
+#1 "Excellent or very good" 
+#2 "Good" 
+#3 "Fair or poor"
+#99 "Missing"
+#95 "No mother reported in the household as a primary caregiver of the child".
+
+table(ment$MotherMH_20)
+ment$MotherMH_20 <- factor(ment$MotherMH_20,
+                           levels = c("1", "2", "3", "95"),
+                           labels = c("0", "1", "2", "3"))
+ment$MotherMH_20 <- as.numeric(as.character(ment$MotherMH_20))
+table(ment$MotherMH_20)
+
+#FatherMH_20 #1 "Does not have condition" #2 "Ever told, but does not currently have condition" #3 "Currently has condition" #99 "Missing" #95 "Children age 0-2 years"
+table(ment$FatherMH_20)
+ment$FatherMH_20 <- factor(ment$FatherMH_20,
+                           levels = c("1", "2", "3", "95"),
+                           labels = c("0", "1", "2", "3"))
+ment$FatherMH_20 <- as.numeric(as.character(ment$FatherMH_20))
+table(ment$FatherMH_20)
+
+#Convert Non binaries into factor
+
+ment$anxiety_20 <- factor(ment$anxiety_20)
+ment$SCREENTIME <- factor(ment$SCREENTIME)
+ment$MotherMH_20 <- factor(ment$MotherMH_20)
+ment$FatherMH_20 <- factor(ment$FatherMH_20)
+```
+
+
+```{r}
+#Recoding learning_20
+
+table(ment$learning_20)
+
+ment <- ment %>%
+  mutate(learning_20 = as.numeric(as.character(learning_20)), # Convert factor to numeric first
+         learning_20 = case_when(
+           learning_20 %in% c(0, 1, 3) ~ 0,  # Codes 0, 1, and 3 are recoded to 0
+           learning_20 == 2 ~ 1,            # Code 2 is recoded to 1
+           TRUE ~ learning_20               # This retains the original value in all other cases
+         ))
+table(ment$learning_20)
+ment$learning_20 <- as.factor(ment$learning_20)
+str(ment$learning_20)
+str(ment)
+
+#train and Test Dataset (70:30)
+set.seed(123)
+trainIndex <- createDataPartition(ment$learning_20, p = .7, list = FALSE, times = 1)
+train <- ment[trainIndex, ]
+test <- ment[-trainIndex, ]
+```
+
+
+```{r}
+# Fit the model - glm
+model <- glm(learning_20 ~ ., data = train, family = binomial)
+summary(model)
+model <- stepAIC(model, trace = FALSE)
+
+
+# Predict probabilities on the test set
+probabilities <- predict(model, newdata = test, type = "response")
+
+# Convert probabilities to predicted classes
+predicted.classes <- ifelse(probabilities > 0.5, 1, 0)
+
+
+# Model accuracy
+# Convert factors or character to numeric if necessary
+actual.classes <- if(is.factor(test$learning_20)) as.numeric(as.character(test$learning_20)) else test$learning_20
+accuracy <- mean(predicted.classes == actual.classes)
+
+print(accuracy)
+```
+
+
+```{r}
+LDA <- lda(learning_20~., data=train)
+print(LDA)
+# Predicting posterior probabilities for each class
+head(predict(LDA, train)$posterior, n=10)
+
+# Storing predictions made on train and test data sets
+mydata_LDA_trn_pred = predict(LDA, train)$class
+mydata_LDA_tst_pred = predict(LDA, test)$class
+# Calculating the error in prediction for both test and train data
+calc_class_err = function(actual, predicted) {
+  mean(actual != predicted)
+}
+calc_class_err(predicted = mydata_LDA_trn_pred, actual = train$learning_20)
+calc_class_err(predicted = mydata_LDA_tst_pred, actual = test$learning_20)
+# prediction table which can be used to calculate accuracy
+table(predicted = mydata_LDA_tst_pred, actual = test$learning_20)
+
+
+# Calculating accuracy
+# Confusion matrix
+conf_matrix <- matrix(c(10593  , 270  , 650 ,106), ncol=2)
+# Extracting elements from the matrix
+TN <- conf_matrix[1, 1]
+FN <- conf_matrix[1, 2]
+FP <- conf_matrix[2, 1]
+TP <- conf_matrix[2, 2]
+# Calculating accuracy
+accuracy_LDA <- (TP + TN) / (TP + TN + FP + FN)
+# Printing accuracy
+print(accuracy_LDA)
+```
+
+
+```{r}
+
+# library
+library(glmnet)
+
+# Prepare the training data
+# predictors
+x_train <- as.matrix(train[, -which(names(train) == "learning_20")]) 
+# binary outcome
+y_train <- train$learning_20 
+# Prepare the test data
+# predictors
+x_test <- as.matrix(test[, -which(names(test) == "learning_20")])
+# binary outcome
+y_test <- test$learning_20 
+
+str(x_train)
+x_train_numeric <- apply(x_train, 2, as.numeric)
+
+# Use cross-validation to find the optimal lambda for Lasso regularization
+set.seed(123) 
+fit <- cv.glmnet(x_train_numeric, y_train, nfolds = 10, alpha = 1, family = "binomial", type.measure = "auc")
+
+# Plot the cross-validation curve
+plot(fit)
+fit$lambda.1se
+
+
+# Fit the Lasso model using the optimal lambda found
+lass_model <- glmnet(x_train, y_train, 
+                     family = "binomial", 
+                     alpha = 1, lambda = fit$lambda.1se)
+x_test_numeric <- apply(x_test, 2, as.numeric)
+#Predict Using the Numeric Matrix
+probabilities <- predict(lass_model, newx = x_test_numeric, lambda = fit$lambda.1se, type = "response")
+predicted_classes <- ifelse(probabilities > 0.5, 1, 0)
+# Evaluate the model's performance on the test set
+confusion_matrix <- table(Predicted = predicted_classes, True = y_test)
+# Print the confusion matrix
+print(confusion_matrix)
+# accuracy, sensitivity
+acc <- sum(diag(confusion_matrix)) / sum(confusion_matrix)
+print(paste("acc:", acc))
+
+
+
+```
+```{r}
+#To predict learning_20 using regression trees and related approaches, 
+#treating the response learning_20(outcome) as a quantitative variable,
+#and other variables are the predictors.
+
+set.seed(150)
+model <- train(
+  learning_20 ~ ., data = train, method = "rpart",
+  trControl = trainControl("cv", number = 10),
+  tuneLength = 10
+)
+
+library(rpart.plot)
+summary(model)
+rpart.plot(model$finalModel)
+
+```
+
+```{r}
+library(caret)
+library(randomForest)
+
+# Identify near zero variance predictors
+trainZero <- caret::nearZeroVar(ment, saveMetrics = TRUE)
+table(trainZero$zeroVar)
+
+# Remove near zero variance predictors from the dataset
+ment <- ment[, trainZero$zeroVar == FALSE]
+
+# Prepare the data
+x <- as.matrix(ment[, !names(ment) %in% "learning_20"])
+y <- as.factor(ment$learning_20)
+
+# Set the seed for reproducibility
+set.seed(1999)
+
+# Train the Random Forest model
+forest <- randomForest::randomForest(x = x, y = y, ntree = 200)
+
+# Print the model summary
+print(forest)
+
+# Identify the number of trees that gives the lowest OOB error rate
+best_ntree <- which.min(forest$err.rate[, "OOB"])
+print(paste("Best ntree:", best_ntree))
+
+# Error rate at the best_ntree
+print(paste("OOB Error Rate at best ntree:", forest$err.rate[best_ntree, "OOB"]))
+
+# Plot variable importance
+randomForest::varImpPlot(forest)
+
+# Create a bar plot for variable importance
+var_imp <- importance(forest)
+var_imp_plot <- barplot(var_imp[, "MeanDecreaseGini"], names.arg = rownames(var_imp), las = 2, cex.names = 0.7, main = "Variable Importance")
+
+# Print variable importance rankings
+print("Variable Importance for Random Forest Model:")
+print(var_imp)
+
+# Print Gini Index for predictors
+print("Gini Index for Predictors:")
+print(importance(forest)[, "MeanDecreaseGini"])
+
+# Store the best model (if needed)
+best_model <- forest
+
+```
+
