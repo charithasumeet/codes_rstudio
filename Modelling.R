@@ -1,6 +1,6 @@
 ---
-  title: "Midtermproject Part2"
-author: "Hemanth Potu"
+  title: "Mid Term Project"
+author: "Charitha"
 date: "2023-11-07"
 output: pdf_document
 ---
